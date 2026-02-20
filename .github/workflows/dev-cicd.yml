@@ -3,7 +3,7 @@ name: Dev CI/CD Pipeline
 on:
   push:
     branches:
-      - Dev
+      - main
 
 jobs:
   build-push-deploy:
