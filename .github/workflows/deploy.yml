@@ -111,7 +111,7 @@ jobs:
               ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
 
             echo "==============================="
-            echo "Step 5: Pulling images from ECR"
+            echo "Step 5: Pulling latest images from ECR"
             echo "==============================="
             sudo docker pull ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/job-portal-backend:latest
             sudo docker pull ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/job-portal-frontend:latest
@@ -137,23 +137,29 @@ jobs:
               --restart always \
               -v mongo_data:/data/db \
               mongo:6.0
-            sleep 8
+            echo "Waiting for MongoDB to be ready..."
+            sleep 10
             sudo docker logs mongo --tail 5
 
             echo "==============================="
-            echo "Step 9: Starting Backend (port 5000)"
+            echo "Step 9: Starting Backend (port 8000)"
             echo "==============================="
             sudo docker run -d \
               --name backend \
               --network app-network \
               --restart always \
-              -p 5000:5000 \
-              -e MONGO_URI="${{ secrets.MONGO_URI }}" \
-              -e PORT=5000 \
-              -e JWT_SECRET="${{ secrets.JWT_SECRET }}" \
+              -p 8000:8000 \
+              -e MONGODB_URI="${{ secrets.MONGODB_URI }}" \
+              -e PORT=8000 \
+              -e SECRET_KEY="${{ secrets.SECRET_KEY }}" \
+              -e CLOUDINARY_API_KEY="${{ secrets.CLOUDINARY_API_KEY }}" \
+              -e CLOUDINARY_SECRET_KEY="${{ secrets.CLOUDINARY_SECRET_KEY }}" \
+              -e CLOUDINARY_NAME="${{ secrets.CLOUDINARY_NAME }}" \
+              -e NODE_ENV=production \
               ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/job-portal-backend:latest
+            echo "Waiting for backend to be ready..."
             sleep 8
-            sudo docker logs backend --tail 10
+            sudo docker logs backend --tail 15
 
             echo "==============================="
             echo "Step 10: Starting Frontend (port 80)"
@@ -168,7 +174,7 @@ jobs:
             sudo docker logs frontend --tail 10
 
             echo "==============================="
-            echo "Step 11: Cleanup"
+            echo "Step 11: Cleanup old images"
             echo "==============================="
             sudo docker image prune -f
 
@@ -176,7 +182,7 @@ jobs:
             echo "════════════════════════════════════════════"
             echo "✅ Deployment Complete!"
             echo "🌐 Frontend → http://${{ secrets.EC2_HOST }}"
-            echo "⚙️  Backend  → http://${{ secrets.EC2_HOST }}:5000"
+            echo "⚙️  Backend  → http://${{ secrets.EC2_HOST }}:8000"
             echo "════════════════════════════════════════════"
             echo ""
             sudo docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
