@@ -163,13 +163,13 @@ jobs:
             # Wait for backend to be ready
             sleep 5
 
-            # ── Start Frontend container ──
+            # ── Start Frontend container (port 80 — no port needed in browser) ──
             echo "Starting Frontend..."
             sudo docker run -d \
               --name frontend \
               --network app-network \
               --restart always \
-              -p 3000:4173 \
+              -p 80:4173 \
               ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/job-portal-frontend:latest
 
             # ── Clean up dangling images to save disk space ──
@@ -179,7 +179,7 @@ jobs:
             echo ""
             echo "════════════════════════════════════════════"
             echo "✅ Deployment Complete!"
-            echo "🌐 Frontend → http://${{ secrets.EC2_HOST }}:3000"
+            echo "🌐 Frontend → http://${{ secrets.EC2_HOST }}"
             echo "⚙️  Backend  → http://${{ secrets.EC2_HOST }}:8000"
             echo "════════════════════════════════════════════"
             echo ""
