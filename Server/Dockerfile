@@ -1,4 +1,4 @@
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
@@ -7,6 +7,9 @@ RUN npm install
 
 COPY . .
 
-EXPOSE 8000
+# build dist/index.js if build script exists, skip if not
+RUN npm run build --if-present
+
+EXPOSE 5000
 
 CMD ["npm", "start"]

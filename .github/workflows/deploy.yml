@@ -77,110 +77,106 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
 
-            # ── Install Docker if not present ──
-            if ! command -v docker &> /dev/null; then
-              echo "Installing Docker..."
-              sudo apt-get update -y
-              sudo apt-get install -y ca-certificates curl gnupg
-              sudo install -m 0755 -d /etc/apt/keyrings
-              curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-              sudo chmod a+r /etc/apt/keyrings/docker.gpg
-              echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-                https://download.docker.com/linux/ubuntu \
-                $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-                sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-              sudo apt-get update -y
-              sudo apt-get install -y docker-ce docker-ce-cli containerd.io
-              sudo usermod -aG docker ubuntu
-              echo "Docker installed successfully"
-            else
-              echo "Docker already installed: $(docker --version)"
-            fi
+            echo "==============================="
+            echo "Step 1: Checking Docker version"
+            echo "==============================="
+            docker --version || sudo docker --version
 
-            # ── Install AWS CLI if not present ──
+            echo "==============================="
+            echo "Step 2: Installing AWS CLI"
+            echo "==============================="
             if ! command -v aws &> /dev/null; then
-              echo "Installing AWS CLI..."
-              sudo apt-get install -y unzip
+              sudo apt-get install -y unzip curl
               curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
               unzip -q awscliv2.zip
               sudo ./aws/install
               rm -rf awscliv2.zip aws
-              echo "AWS CLI installed successfully"
+              echo "AWS CLI installed"
             else
               echo "AWS CLI already installed: $(aws --version)"
             fi
 
-            # ── Configure AWS credentials on EC2 ──
+            echo "==============================="
+            echo "Step 3: Configuring AWS credentials"
+            echo "==============================="
             aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
             aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
             aws configure set region us-east-1
 
-            # ── Login to ECR from EC2 ──
+            echo "==============================="
+            echo "Step 4: Logging into ECR"
+            echo "==============================="
             aws ecr get-login-password --region us-east-1 | \
               sudo docker login --username AWS --password-stdin \
               ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
 
-            # ── Pull latest images from ECR ──
-            echo "Pulling latest images from ECR..."
+            echo "==============================="
+            echo "Step 5: Pulling images from ECR"
+            echo "==============================="
             sudo docker pull ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/job-portal-backend:latest
             sudo docker pull ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/job-portal-frontend:latest
 
-            # ── Stop and remove old containers ──
-            echo "Stopping old containers..."
+            echo "==============================="
+            echo "Step 6: Stopping old containers"
+            echo "==============================="
             sudo docker stop frontend backend mongo 2>/dev/null || true
-            sudo docker rm   frontend backend mongo 2>/dev/null || true
-
-            # ── Remove old network if exists ──
+            sudo docker rm -f frontend backend mongo 2>/dev/null || true
             sudo docker network rm app-network 2>/dev/null || true
 
-            # ── Create Docker network ──
+            echo "==============================="
+            echo "Step 7: Creating Docker network"
+            echo "==============================="
             sudo docker network create app-network
 
-            # ── Start MongoDB container ──
-            echo "Starting MongoDB..."
+            echo "==============================="
+            echo "Step 8: Starting MongoDB"
+            echo "==============================="
             sudo docker run -d \
               --name mongo \
               --network app-network \
               --restart always \
               -v mongo_data:/data/db \
               mongo:6.0
+            sleep 8
+            sudo docker logs mongo --tail 5
 
-            # Wait for Mongo to be ready
-            sleep 5
-
-            # ── Start Backend container ──
-            echo "Starting Backend..."
+            echo "==============================="
+            echo "Step 9: Starting Backend (port 5000)"
+            echo "==============================="
             sudo docker run -d \
               --name backend \
               --network app-network \
               --restart always \
-              -p 8000:8000 \
-              -e MONGO_URI=${{ secrets.MONGO_URI }} \
-              -e PORT=8000 \
-              -e JWT_SECRET=${{ secrets.JWT_SECRET }} \
+              -p 5000:5000 \
+              -e MONGO_URI="${{ secrets.MONGO_URI }}" \
+              -e PORT=5000 \
+              -e JWT_SECRET="${{ secrets.JWT_SECRET }}" \
               ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/job-portal-backend:latest
+            sleep 8
+            sudo docker logs backend --tail 10
 
-            # Wait for backend to be ready
-            sleep 5
-
-            # ── Start Frontend container (port 80 — no port needed in browser) ──
-            echo "Starting Frontend..."
+            echo "==============================="
+            echo "Step 10: Starting Frontend (port 80)"
+            echo "==============================="
             sudo docker run -d \
               --name frontend \
               --network app-network \
               --restart always \
               -p 80:4173 \
               ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/job-portal-frontend:latest
+            sleep 5
+            sudo docker logs frontend --tail 10
 
-            # ── Clean up dangling images to save disk space ──
+            echo "==============================="
+            echo "Step 11: Cleanup"
+            echo "==============================="
             sudo docker image prune -f
 
-            # ── Show running containers ──
             echo ""
             echo "════════════════════════════════════════════"
             echo "✅ Deployment Complete!"
             echo "🌐 Frontend → http://${{ secrets.EC2_HOST }}"
-            echo "⚙️  Backend  → http://${{ secrets.EC2_HOST }}:8000"
+            echo "⚙️  Backend  → http://${{ secrets.EC2_HOST }}:5000"
             echo "════════════════════════════════════════════"
             echo ""
             sudo docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
