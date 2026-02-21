@@ -36,7 +36,7 @@ jobs:
 
       # ── Backend ──
       - name: Build backend Docker image
-        run: docker build -t $BACKEND_IMAGE ./server
+        run: docker build -t $BACKEND_IMAGE ./backend
 
       - name: Tag and push backend image to ECR
         run: |
